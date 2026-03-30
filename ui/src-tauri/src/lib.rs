@@ -276,20 +276,9 @@ fn start_backend(
             let mut lock = state_backend.0.lock().unwrap();
             *lock = Some(child);
 
-            // Wait for uvicorn to start accepting connections
-            for _ in 0..50 {
-                std::thread::sleep(std::time::Duration::from_millis(100));
-                if std::net::TcpStream::connect("127.0.0.1:8384").is_ok() {
-                    return BackendStatus {
-                        started: true,
-                        error: None,
-                    };
-                }
-            }
-
             BackendStatus {
                 started: true,
-                error: Some("Backend spawned but not yet responding on port 8384.".to_string()),
+                error: None,
             }
         }
         Err(e) => BackendStatus {

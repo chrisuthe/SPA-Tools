@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import './Setup.css';
 
-type SetupState = 'checking' | 'python-missing' | 'deps-missing' | 'installing' | 'ready';
+type SetupState = 'checking' | 'python-missing' | 'deps-missing' | 'installing' | 'ready' | 'starting';
 type PlatformTab = 'windows' | 'macos' | 'linux';
 
 interface PythonStatus {
@@ -90,10 +90,25 @@ export default function Setup({ onReady }: Props) {
   }, []);
 
   const handleReady = useCallback(async () => {
+    setState('starting');
     try {
       const backend = await invoke<{ started: boolean; error: string | null }>('start_backend');
       if (backend.started) {
-        onReady();
+        // Give the backend a moment, then verify it's actually responding
+        for (let i = 0; i < 20; i++) {
+          try {
+            const res = await fetch('http://127.0.0.1:8384/api/health');
+            if (res.ok) {
+              onReady();
+              return;
+            }
+          } catch {
+            // Not ready yet — keep trying
+          }
+          await new Promise((r) => setTimeout(r, 250));
+        }
+        // Backend spawned but never responded
+        onReady(); // proceed anyway — Dashboard will show its own error
       } else {
         setInstallError(backend.error || 'Failed to start backend.');
         setState('deps-missing');
@@ -168,6 +183,9 @@ export default function Setup({ onReady }: Props) {
             pythonStatus={pythonStatus}
             onLaunch={handleReady}
           />
+        )}
+        {state === 'starting' && (
+          <StartingView />
         )}
       </div>
     </div>
@@ -341,6 +359,16 @@ function InstallingView({
       <button className="setup-btn setup-btn-dim" disabled>
         Cancel
       </button>
+    </div>
+  );
+}
+
+function StartingView() {
+  return (
+    <div className="setup-section">
+      <div className="setup-spinner" />
+      <h2 className="setup-heading">Starting SPATools</h2>
+      <p className="setup-subtext">Launching the backend server...</p>
     </div>
   );
 }
