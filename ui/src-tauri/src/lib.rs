@@ -268,16 +268,28 @@ fn start_backend(
         .args(["-m", "uvicorn", "api.server:app",
                "--host", "127.0.0.1", "--port", "8384"])
         .current_dir(project_root)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
         .spawn()
     {
         Ok(child) => {
             let mut lock = state_backend.0.lock().unwrap();
             *lock = Some(child);
+
+            // Wait for uvicorn to start accepting connections
+            for _ in 0..50 {
+                std::thread::sleep(std::time::Duration::from_millis(100));
+                if std::net::TcpStream::connect("127.0.0.1:8384").is_ok() {
+                    return BackendStatus {
+                        started: true,
+                        error: None,
+                    };
+                }
+            }
+
             BackendStatus {
                 started: true,
-                error: None,
+                error: Some("Backend spawned but not yet responding on port 8384.".to_string()),
             }
         }
         Err(e) => BackendStatus {
