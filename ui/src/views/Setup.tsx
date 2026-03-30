@@ -89,13 +89,39 @@ export default function Setup({ onReady }: Props) {
     }
   }, []);
 
-  const handleReady = useCallback(async () => {
-    setState('starting');
-    try {
-      const backend = await invoke<{ started: boolean; error: string | null }>('start_backend');
-      if (backend.started) {
-        // Give the backend a moment, then verify it's actually responding
-        for (let i = 0; i < 20; i++) {
+  // Initial check on mount
+  useEffect(() => {
+    runChecks();
+  }, [runChecks]);
+
+  // Auto-proceed: ready → starting after 1s
+  useEffect(() => {
+    if (state === 'ready') {
+      const timer = setTimeout(() => setState('starting'), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [state]);
+
+  // Starting state: spawn backend, poll until healthy, then proceed
+  useEffect(() => {
+    if (state !== 'starting') return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const backend = await invoke<{ started: boolean; error: string | null }>('start_backend');
+        if (cancelled) return;
+
+        if (!backend.started) {
+          setInstallError(backend.error || 'Failed to start backend.');
+          setState('deps-missing');
+          return;
+        }
+
+        // Poll /api/health until the server is responding
+        for (let i = 0; i < 30; i++) {
+          if (cancelled) return;
+          await new Promise((r) => setTimeout(r, 500));
           try {
             const res = await fetch('http://127.0.0.1:8384/api/health');
             if (res.ok) {
@@ -103,37 +129,21 @@ export default function Setup({ onReady }: Props) {
               return;
             }
           } catch {
-            // Not ready yet — keep trying
+            // Not ready yet
           }
-          await new Promise((r) => setTimeout(r, 250));
         }
-        // Backend spawned but never responded
-        onReady(); // proceed anyway — Dashboard will show its own error
-      } else {
-        setInstallError(backend.error || 'Failed to start backend.');
+        // Timed out — proceed anyway, Dashboard will show its own error
+        if (!cancelled) onReady();
+      } catch (err) {
+        if (cancelled) return;
+        const msg = err instanceof Error ? err.message : String(err);
+        setInstallError(msg);
         setState('deps-missing');
       }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setInstallError(msg);
-      setState('deps-missing');
-    }
-  }, [onReady]);
+    })();
 
-  // Initial check on mount
-  useEffect(() => {
-    runChecks();
-  }, [runChecks]);
-
-  // Auto-proceed when ready
-  useEffect(() => {
-    if (state === 'ready') {
-      const timer = setTimeout(() => {
-        handleReady();
-      }, 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [state, handleReady]);
+    return () => { cancelled = true; };
+  }, [state, onReady]);
 
   // Scroll install output to bottom
   useEffect(() => {
@@ -181,7 +191,7 @@ export default function Setup({ onReady }: Props) {
         {state === 'ready' && (
           <ReadyView
             pythonStatus={pythonStatus}
-            onLaunch={handleReady}
+            onLaunch={() => setState('starting')}
           />
         )}
         {state === 'starting' && (
