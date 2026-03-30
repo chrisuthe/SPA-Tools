@@ -1,0 +1,43 @@
+:root {
+  /* Backgrounds */
+  --bg-primary: #1e2a3a;
+  --bg-sidebar: #141c28;
+  --bg-card: #243447;
+  --bg-recessed: #1a2533;
+
+  /* Accent */
+  --accent: #5b9bd5;
+  --accent-light: #81b4d8;
+  --accent-tint: #1a2640;
+
+  /* Text */
+  --text-primary: #e8f0f8;
+  --text-secondary: #8aa8c7;
+  --text-tertiary: #6b8299;
+  --text-disabled: #4a5568;
+
+  /* Status */
+  --status-ok: #4caf50;
+  --status-warn: #ffa726;
+  --status-error: #ff5252;
+
+  /* Typography */
+  --font-sans: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-mono: 'SF Mono', 'Consolas', 'Liberation Mono', monospace;
+
+  /* Spacing */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+
+  /* Radii */
+  --radius-sm: 3px;
+  --radius-md: 6px;
+
+  /* Sidebar */
+  --sidebar-width: 200px;
+  --sidebar-collapsed: 56px;
+}

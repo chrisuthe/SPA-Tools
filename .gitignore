@@ -29,3 +29,10 @@ htmlcov/
 
 # Scan results (may contain vehicle-specific data)
 *_scan_results.json
+
+# Tauri + React frontend
+ui/node_modules/
+ui/dist/
+ui/src-tauri/target/
+# Brainstorm artifacts
+.superpowers/
