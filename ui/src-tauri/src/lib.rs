@@ -288,6 +288,9 @@ fn start_backend(
     cmd.args(["-m", "uvicorn", "api.server:app",
               "--host", "127.0.0.1", "--port", "8384"])
        .current_dir(project_root)
+       // Add the project root to PYTHONPATH so Python finds our modules
+       // whether running from source tree or bundled resources
+       .env("PYTHONPATH", project_root)
        .stdout(Stdio::null());
 
     if let Some(f) = log_file {
@@ -358,33 +361,37 @@ pub fn run() {
         .expect("error while running tauri application");
 }
 
-/// Walk candidate directories to find the project root (the folder that
-/// contains `requirements.txt` AND `api/`).
+/// Find the directory containing the Python backend files.
 ///
-/// Strategy: collect seed directories, then walk each one upward to the
-/// filesystem root. This handles the built exe being arbitrarily deep
-/// inside the project tree (e.g. ui/src-tauri/target/release/).
+/// Two modes:
+///   1. **Bundled (release build):** Tauri bundles Python files into
+///      `<resource_dir>/python/`. We check for `python/api/` there.
+///   2. **Dev mode:** Walk from the exe / CWD upward to find the source
+///      tree (identified by `requirements.txt` + `api/` side by side).
 fn find_project_root(app: &tauri::App) -> PathBuf {
+    // --- Mode 1: Check for bundled resources ---
+    if let Ok(res) = app.path().resource_dir() {
+        let bundled = res.join("python");
+        if bundled.join("api").is_dir() && bundled.join("requirements.txt").exists() {
+            return bundled;
+        }
+    }
+
+    // --- Mode 2: Dev mode — walk up from seeds ---
     let mut seeds: Vec<PathBuf> = Vec::new();
 
-    // Seed 1: Tauri resource dir
     if let Ok(res) = app.path().resource_dir() {
         seeds.push(res);
     }
-
-    // Seed 2: current working directory
     if let Ok(cwd) = std::env::current_dir() {
         seeds.push(cwd);
     }
-
-    // Seed 3: executable location
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
             seeds.push(dir.to_path_buf());
         }
     }
 
-    // Walk each seed upward until we find requirements.txt + api/
     for seed in &seeds {
         let mut dir = seed.as_path();
         loop {

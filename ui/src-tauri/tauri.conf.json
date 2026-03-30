@@ -9,6 +9,20 @@
     "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build"
   },
+  "bundle": {
+    "resources": {
+      "../../api/**/*": "python/api/",
+      "../../cli/**/*": "python/cli/",
+      "../../config/**/*": "python/config/",
+      "../../dtc/**/*": "python/dtc/",
+      "../../ecu_tune/**/*": "python/ecu_tune/",
+      "../../live_data/**/*": "python/live_data/",
+      "../../module_map/**/*": "python/module_map/",
+      "../../protocol/**/*": "python/protocol/",
+      "../../transport/**/*": "python/transport/",
+      "../../requirements.txt": "python/"
+    }
+  },
   "app": {
     "windows": [
       {
