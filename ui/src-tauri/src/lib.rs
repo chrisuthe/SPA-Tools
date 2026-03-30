@@ -288,10 +288,15 @@ fn start_backend(
     cmd.args(["-m", "uvicorn", "api.server:app",
               "--host", "127.0.0.1", "--port", "8384"])
        .current_dir(project_root)
-       // Add the project root to PYTHONPATH so Python finds our modules
-       // whether running from source tree or bundled resources
        .env("PYTHONPATH", project_root)
        .stdout(Stdio::null());
+
+    // Hide the console window on Windows
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
 
     if let Some(f) = log_file {
         cmd.stderr(Stdio::from(f));
