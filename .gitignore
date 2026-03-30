@@ -34,5 +34,6 @@ htmlcov/
 ui/node_modules/
 ui/dist/
 ui/src-tauri/target/
+ui/src-tauri/python/
 # Brainstorm artifacts
 .superpowers/
