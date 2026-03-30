@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Open-source Volvo SPA platform diagnostic and tuning toolkit"
 requires-python = ">=3.10"
 dependencies = [
-    "python-doipclient>=1.1.0",
+    "doipclient>=1.1.0",
     "udsoncan>=1.25.0",
     "pyyaml>=6.0",
     "rich>=13.0",

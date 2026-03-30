@@ -1,5 +1,5 @@
 # Core protocol libraries
-python-doipclient>=1.1.0     # DoIP transport (ISO-13400)
+doipclient>=1.1.0     # DoIP transport (ISO-13400)
 udsoncan>=1.25.0             # UDS protocol (ISO-14229)
 
 # Data / config
