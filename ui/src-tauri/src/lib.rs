@@ -4,6 +4,25 @@ use std::sync::Mutex;
 
 struct PythonBackend(Mutex<Option<Child>>);
 
+/// Kill a process and all its children on Windows.
+/// On other platforms, kill the process directly.
+fn kill_process_tree(child: &mut Child) {
+    let pid = child.id();
+    #[cfg(target_os = "windows")]
+    {
+        // taskkill /F /T kills the entire process tree
+        let _ = Command::new("taskkill")
+            .args(["/F", "/T", "/PID", &pid.to_string()])
+            .output();
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        // Send SIGTERM to the process group
+        unsafe { libc::kill(-(pid as i32), libc::SIGTERM); }
+        let _ = child.kill();
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -27,7 +46,7 @@ pub fn run() {
                 if let Some(state) = window.try_state::<PythonBackend>() {
                     if let Ok(mut child) = state.0.lock() {
                         if let Some(ref mut c) = *child {
-                            let _ = c.kill();
+                            kill_process_tree(c);
                         }
                     }
                 }
