@@ -359,51 +359,45 @@ pub fn run() {
 }
 
 /// Walk candidate directories to find the project root (the folder that
-/// contains `requirements.txt`).  Candidates in order of preference:
-///   1. resource_dir from Tauri (often the app bundle root)
-///   2. parent of resource_dir (covers src-tauri/../)
-///   3. current working directory
-///   4. parent of CWD
-///   5. grandparent of CWD
+/// contains `requirements.txt` AND `api/`).
+///
+/// Strategy: collect seed directories, then walk each one upward to the
+/// filesystem root. This handles the built exe being arbitrarily deep
+/// inside the project tree (e.g. ui/src-tauri/target/release/).
 fn find_project_root(app: &tauri::App) -> PathBuf {
-    let mut candidates: Vec<PathBuf> = Vec::new();
+    let mut seeds: Vec<PathBuf> = Vec::new();
 
+    // Seed 1: Tauri resource dir
     if let Ok(res) = app.path().resource_dir() {
-        candidates.push(res.clone());
-        if let Some(parent) = res.parent() {
-            candidates.push(parent.to_path_buf());
-        }
+        seeds.push(res);
     }
 
+    // Seed 2: current working directory
     if let Ok(cwd) = std::env::current_dir() {
-        candidates.push(cwd.clone());
-        if let Some(p) = cwd.parent() {
-            candidates.push(p.to_path_buf());
-            if let Some(gp) = p.parent() {
-                candidates.push(gp.to_path_buf());
-            }
-        }
+        seeds.push(cwd);
     }
 
-    // Also try the executable's directory and its ancestors
+    // Seed 3: executable location
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
-            candidates.push(dir.to_path_buf());
-            if let Some(p) = dir.parent() {
-                candidates.push(p.to_path_buf());
-                if let Some(gp) = p.parent() {
-                    candidates.push(gp.to_path_buf());
-                }
+            seeds.push(dir.to_path_buf());
+        }
+    }
+
+    // Walk each seed upward until we find requirements.txt + api/
+    for seed in &seeds {
+        let mut dir = seed.as_path();
+        loop {
+            if dir.join("requirements.txt").exists() && dir.join("api").is_dir() {
+                return dir.to_path_buf();
+            }
+            match dir.parent() {
+                Some(parent) if parent != dir => dir = parent,
+                _ => break,
             }
         }
     }
 
-    for candidate in &candidates {
-        if candidate.join("requirements.txt").exists() {
-            return candidate.clone();
-        }
-    }
-
-    // Last resort: use CWD even if requirements.txt is not there
+    // Last resort
     std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
 }
