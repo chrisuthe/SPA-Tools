@@ -8,6 +8,11 @@ pyyaml>=6.0                  # module_map YAML files
 # CLI output
 rich>=13.0                   # Pretty terminal tables, live panels
 
+# API server
+fastapi>=0.115.0
+uvicorn[standard]>=0.34.0
+websockets>=14.0
+
 # Dev / testing
 pytest>=7.0
 pytest-asyncio>=0.21
