@@ -132,8 +132,15 @@ export default function Setup({ onReady }: Props) {
             // Not ready yet
           }
         }
-        // Timed out — proceed anyway, Dashboard will show its own error
-        if (!cancelled) onReady();
+        // Timed out — fetch the backend log for diagnostics
+        if (!cancelled) {
+          try {
+            const log = await invoke<string>('get_backend_log');
+            setInstallOutput(log);
+          } catch { /* ignore */ }
+          setInstallError('Backend started but is not responding on port 8384. Check the log below.');
+          setState('deps-missing');
+        }
       } catch (err) {
         if (cancelled) return;
         const msg = err instanceof Error ? err.message : String(err);

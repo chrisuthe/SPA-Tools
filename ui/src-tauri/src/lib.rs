@@ -264,14 +264,39 @@ fn start_backend(
 
     let project_root = &state_root.0;
 
-    match Command::new(&python_cmd)
-        .args(["-m", "uvicorn", "api.server:app",
-               "--host", "127.0.0.1", "--port", "8384"])
-        .current_dir(project_root)
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-    {
+    // First verify the project root looks correct
+    let api_dir = project_root.join("api");
+    let req_file = project_root.join("requirements.txt");
+    if !api_dir.exists() || !req_file.exists() {
+        return BackendStatus {
+            started: false,
+            error: Some(format!(
+                "Project root '{}' is missing api/ or requirements.txt. \
+                 api/ exists: {}, requirements.txt exists: {}",
+                project_root.display(),
+                api_dir.exists(),
+                req_file.exists(),
+            )),
+        };
+    }
+
+    // Write stderr to a temp log file so we can diagnose startup failures
+    let log_path = std::env::temp_dir().join("spatools-backend.log");
+    let log_file = std::fs::File::create(&log_path).ok();
+
+    let mut cmd = Command::new(&python_cmd);
+    cmd.args(["-m", "uvicorn", "api.server:app",
+              "--host", "127.0.0.1", "--port", "8384"])
+       .current_dir(project_root)
+       .stdout(Stdio::null());
+
+    if let Some(f) = log_file {
+        cmd.stderr(Stdio::from(f));
+    } else {
+        cmd.stderr(Stdio::null());
+    }
+
+    match cmd.spawn() {
         Ok(child) => {
             let mut lock = state_backend.0.lock().unwrap();
             *lock = Some(child);
@@ -283,9 +308,15 @@ fn start_backend(
         }
         Err(e) => BackendStatus {
             started: false,
-            error: Some(format!("Failed to start backend: {}", e)),
+            error: Some(format!("Failed to spawn backend: {} (root: {})", e, project_root.display())),
         },
     }
+}
+
+#[tauri::command]
+fn get_backend_log() -> String {
+    let log_path = std::env::temp_dir().join("spatools-backend.log");
+    std::fs::read_to_string(&log_path).unwrap_or_else(|_| "No log file found.".to_string())
 }
 
 // ---------------------------------------------------------------------------
@@ -310,6 +341,7 @@ pub fn run() {
             check_dependencies,
             install_dependencies,
             start_backend,
+            get_backend_log,
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Destroyed = event {
