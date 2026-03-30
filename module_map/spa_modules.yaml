@@ -1,0 +1,231 @@
+# module_map/spa_modules.yaml
+#
+# Volvo SPA platform module registry.
+#
+# Maps human-readable module names to DoIP/UDS logical addresses,
+# physical chip info, CAN bus membership, and security notes.
+#
+# STATUS KEY:
+#   confirmed  - Logical address verified on a live SPA vehicle
+#   candidate  - Community best-guess, needs verification
+#   unknown    - No address information available yet
+#
+# CONTRIBUTING:
+#   Run: python -m cli.main discover
+#   The DoIP VehicleIdentificationResponse returns the VCM logical address.
+#   For other modules, run scan-dids and cross-reference with VIDA network captures.
+#   Submit confirmed addresses as a PR with your vehicle year/model/powertrain.
+#
+# SOURCES:
+#   - python-doipclient issue #2 (tester addr 0x0E80 confirmed on SPA)
+#   - SwedeSpeed VCM connectivity thread (module names, DTC prefixes)
+#   - volvo-fix.com SPA chip documentation (SPC5646B, SPC5748G, etc.)
+#   - d5t5.com VDASH/VIDA documentation
+
+metadata:
+  platform: SPA
+  model_years: "2016+"
+  tester_logical_address: "0x0E80"
+  doip_port: 13400
+  notes: >
+    The VCM (Vehicle Communications Module) is the DoIP Ethernet gateway.
+    All diagnostic traffic enters through the VCM. Sub-modules may require
+    DoIP routing activation (service 0x0005) to reach directly — this is
+    under active investigation. The OBD-II port exposes both VCM Ethernet
+    pins AND legacy CAN pins simultaneously.
+
+modules:
+
+  VCM:
+    full_name: "Vehicle Communications Module"
+    logical_address: "0x0010"
+    address_status: candidate
+    description: >
+      DoIP Ethernet gateway. Routes all diagnostic traffic to sub-modules.
+      Also handles telematics (3G/4G), WiFi hotspot, and GPS on SPA.
+      If VCM is offline, Ethernet OBD access is lost entirely.
+    chips: ["SPC564B"]
+    can_buses: ["CAN-IHS (125kbps)", "Ethernet (100BASE-T1)"]
+    notes: >
+      VCM logical address 0x0010 is a candidate — the actual address is
+      returned in the DoIP VehicleIdentificationResponse. Run discover() to get it.
+      VCM failures (VCM-U10xxxx codes) are common on 2016-2018 XC90 due to
+      3G modem end-of-life. US market had an Extended Care replacement program.
+      Without a working VCM, use DiCE + VIDA as fallback for diagnostics.
+
+  CEM:
+    full_name: "Central Electronic Module"
+    logical_address: null
+    address_status: unknown
+    description: >
+      Master body control module. Holds vehicle configuration (CARCfg),
+      immobilizer synchronization codes, and controls most comfort features.
+      Primary target for configuration changes (stop/start, DRL, auto-lock, etc.)
+    chips: ["SPC5646B", "SPC5748G"]
+    can_buses: ["CAN-IHS (125kbps)", "CAN-HS (500kbps)"]
+    security:
+      cem_pin_required: true
+      cem_pin_decode_method: "OBD timing attack (2015-2018 non-iCUP), bench read (iCUP)"
+      iCUP_hw_numbers_blocked: ["31433380", "31473157", "32217456", "32356710"]
+    notes: >
+      Most important module for config work. CEM PIN is required to write.
+      OBD-based PIN decode works for most 2016-2019 non-iCUP models via VDASH/VDD.
+      iCUP (Android infotainment) CEMs require bench chip read from SPC5748G.
+      After writing CEM config, BCM/VDDM configuration reset is required
+      (use free VTool software: Service > Brakes > Reset BCM/VDDM configuration).
+      TODO: Confirm logical address via live DoIP discovery.
+
+  ECM:
+    full_name: "Engine Control Module"
+    logical_address: null
+    address_status: unknown
+    description: >
+      Gasoline engine management. Holds boost maps, fuel maps, timing tables,
+      throttle calibration, and all powertrain calibration data.
+      Target for tune work — requires ECM PIN + level 1 security access.
+    chips: ["R5F72546R (Renesas RH850 eeprom)"]
+    can_buses: ["CAN-HS (500kbps)"]
+    security:
+      ecm_pin_required: true
+      ecm_pin_decode_method: "UCBP adapter for VEA engines (B4204Txx)"
+    notes: >
+      XC90 T6 (2019) uses Volvo Engine Architecture (VEA) 4-cyl 2.0L turbo,
+      engine code B4204T27. ECM PIN decode uses UCBP adapter per d5t5.com.
+      Security level 1 algorithm NOT known — under active research.
+      See docs/security_research.md.
+
+  TCM:
+    full_name: "Transmission Control Module"
+    logical_address: null
+    address_status: unknown
+    description: >
+      Controls the Aisin Warner 8HP75 8-speed automatic on T6/T8.
+      Source of current gear, ATF temperature, shift pattern data.
+    can_buses: ["CAN-HS (500kbps)"]
+    notes: >
+      Current gear DID is a priority target for live_data module.
+      ATF temperature not shown on dash — useful for towing and track use.
+      XC90 T6 uses 8HP75; T5 uses a different unit (verify before assuming same DIDs).
+
+  ABS_BCM:
+    full_name: "Anti-lock Braking System / Brake Control Module"
+    logical_address: null
+    address_status: unknown
+    description: >
+      Handles ABS, traction control, stability control, brake assist,
+      hill start assist, and auto-hold on SPA.
+    chips: ["95640", "R7F701327 + 95526"]
+    can_buses: ["CAN-HS (500kbps)"]
+    notes: >
+      BCM configuration must be reset after CEM config writes.
+      Free VTool software handles this: Service > Brakes > Reset BCM/VDDM configuration.
+
+  CCM:
+    full_name: "Climate Control Module"
+    logical_address: null
+    address_status: unknown
+    description: >
+      Controls HVAC system. Source of interior temp, humidity, blower speed,
+      zone temperatures for front and rear.
+    can_buses: ["CAN-IHS (125kbps)"]
+    notes: >
+      CCM-B1A6996 (humidity sensor fault) is a common SPA code on older vehicles.
+      CCM is connected to CEM via CAN-IHS — reachable through VCM routing (TBC).
+
+  DIM:
+    full_name: "Driver Information Module"
+    logical_address: null
+    address_status: unknown
+    description: >
+      Instrument cluster. Displays speed, fuel, warnings. Source of odometer data.
+      Odometer tampering detection: VDASH claims 99% accuracy for P1-SPA.
+    chips: ["MB9DF126", "95160"]
+    can_buses: ["CAN-IHS (125kbps)"]
+
+  IHU:
+    full_name: "Infotainment Host Unit"
+    logical_address: null
+    address_status: unknown
+    description: >
+      Sensus infotainment system. Runs Android (iCUP) or Linux (older Sensus).
+      Connected via Ethernet and FlexRay to VCM.
+    can_buses: ["Ethernet (100BASE-T1)", "FlexRay"]
+    notes: >
+      VCM-U106000 ("No communication over Ethernet to IHU") is the typical
+      fault when IHU is offline. IHU software updates are VBF files over DoIP.
+      video_in_motion config param may live in IHU rather than CEM.
+
+  PSCM:
+    full_name: "Power Steering Control Module"
+    logical_address: null
+    address_status: unknown
+    description: >
+      Electric power steering controller. Steering weight/feel in each
+      drive mode is configurable via CEM or PSCM config.
+    can_buses: ["CAN-HS (500kbps)"]
+
+  SUM:
+    full_name: "Suspension Module"
+    logical_address: null
+    address_status: unknown
+    description: >
+      Air suspension control (on equipped XC90). Manages ride height and damping.
+      Comfort/Dynamic/Off-Road mode suspension behaviour controlled here.
+    can_buses: ["CAN-HS (500kbps)"]
+    notes: >
+      Only present on air suspension equipped vehicles. Standard suspension
+      XC90 uses passive dampers with no SUM module.
+
+  SCL:
+    full_name: "Steering Column Lock"
+    logical_address: null
+    address_status: unknown
+    description: >
+      Electronic steering column lock. Can be disabled via CEM config (SCL OFF)
+      which is common for engine swap / manual conversion builds.
+    notes: >
+      SCL OFF is a documented VDASH/CEM config operation. Requires CEM PIN.
+      After disabling, the steering wheel unlocks immediately on ignition on.
+
+  VDDM:
+    full_name: "Vehicle Dynamic Domain Host"
+    logical_address: null
+    address_status: unknown
+    description: >
+      Coordinates all chassis dynamics modules (ABS, SUM, PSCM, DEM).
+      Hosts drive mode logic (Comfort / Dynamic / Off-Road / Individual).
+    can_buses: ["CAN-HS (500kbps)"]
+    notes: >
+      BCM/VDDM configuration reset is required after CEM config writes.
+      VTool (free) handles this with one click.
+
+  SRS:
+    full_name: "Supplemental Restraint System (Airbag)"
+    logical_address: null
+    address_status: unknown
+    description: >
+      Central airbag control module plus left (RML) and right (RMR)
+      curtain/side restraint modules.
+    chips: ["TMS570", "RH850-R7F01330"]
+    can_buses: ["CAN-IHS (125kbps)"]
+    notes: >
+      DO NOT attempt to write to SRS modules under any circumstances.
+      Read and clear DTCs only. Incorrect writes can disable airbags.
+
+  DEM:
+    full_name: "Differential Electronic Module"
+    logical_address: null
+    address_status: unknown
+    description: >
+      Controls the active rear differential / Haldex AWD coupling on AWD models.
+    can_buses: ["CAN-HS (500kbps)"]
+    notes: "Only present on AWD equipped vehicles."
+
+  PAC:
+    full_name: "Parking Assist Camera Module"
+    logical_address: null
+    address_status: unknown
+    description: >
+      Manages the 360-degree camera system (City Safety cameras + rear camera).
+    can_buses: ["CAN-IHS (125kbps)", "Ethernet (video)"]
+    notes: "Camera video transmitted over automotive Ethernet, not CAN."

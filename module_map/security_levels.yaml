@@ -1,0 +1,118 @@
+# module_map/security_levels.yaml
+#
+# UDS Security Access (service 0x27) level documentation for Volvo SPA.
+#
+# CURRENT STATUS:
+#   - Level 1 (programming/flash): Algorithm UNKNOWN — active research target
+#   - Level 3 (config/CEM PIN):    CEM PIN decodable via OBD timing attack
+#                                   (VDASH/VDD tools) but the UDS algorithm
+#                                   incorporating that PIN is not public
+#   - Seed capture:                 Possible via Wireshark during VIDA session
+#
+# See docs/security_research.md for full methodology and progress log.
+
+metadata:
+  platform: SPA
+  research_status: active
+  last_updated: "2026-03"
+
+security_levels:
+
+  level_01:
+    uds_subfunctions: [0x01, 0x02]  # requestSeed=0x01, sendKey=0x02
+    name: "Programming level"
+    session_required: programming   # 0x02
+    grants_access_to:
+      - ECM flash read/write (0x23, 0x34, 0x36, 0x37)
+      - Module software download
+      - CEM full reprogramming
+    algorithm_status: UNKNOWN
+    algorithm_notes: >
+      At least one researcher found RSA with a 128-byte key on Volvo D13 truck ECU
+      (source: nefariousmotorsports.com seed-key thread). SPA passenger car ECMs
+      may use the same or a simpler algorithm. Level 7/11 keys found for some ECUs;
+      level 1 remains the hard target. Capturing seed/key pairs from live VIDA
+      programming sessions via Wireshark is the most promising path.
+    known_seeds: []
+    known_keypairs: []
+
+  level_03:
+    uds_subfunctions: [0x03, 0x04]  # requestSeed=0x03, sendKey=0x04
+    name: "Extended diagnostic / CEM config level"
+    session_required: extended      # 0x03
+    grants_access_to:
+      - CEM configuration writes (0x2E)
+      - CEM PIN-protected parameters
+      - Module configuration changes
+      - DTC clear on some modules
+    algorithm_status: UNKNOWN_VIA_OBD
+    algorithm_notes: >
+      The CEM PIN is required and acts as key material. VDASH and VDD decode
+      the CEM PIN for most SPA 2015-2018 non-iCUP models via a timing-based
+      OBD attack (not a true cryptographic solution). The actual UDS 0x27
+      algorithm incorporating the CEM PIN is not publicly documented.
+      iCUP-based CEMs (HW: 31433380, 31473157, 32217456, 32356710) cannot be
+      decoded via OBD — require bench extraction from SPC5748G chip.
+    known_seeds: []
+    known_keypairs: []
+
+  level_11:
+    uds_subfunctions: [0x11, 0x12]
+    name: "Supplier / development level"
+    session_required: extended
+    grants_access_to:
+      - Extended calibration access
+      - Development diagnostic functions
+    algorithm_status: UNKNOWN
+    algorithm_notes: >
+      Some researchers report level 7/11 keys found for Volvo heavy truck ECUs.
+      Whether the same algorithm applies to SPA passenger car ECMs is unconfirmed.
+    known_seeds: []
+    known_keypairs: []
+
+# ── Seed capture methodology ────────────────────────────────────────────────────
+
+seed_capture_procedure:
+  tool: Wireshark
+  interface: "USB-Ethernet adapter NIC (the one connected to VOE adapter)"
+  filter: "tcp.port == 13400"
+  trigger: "VIDA software update or configuration write session (requires VIDA subscription)"
+
+  target_bytes:
+    seed_response: "67 01 XX XX XX XX"
+    # 0x67 = positive response to 0x27 SecurityAccess
+    # 0x01 = security level 1 (requestSeed)
+    # XX XX XX XX = 4-byte seed from ECU
+
+    key_request: "27 02 XX XX XX XX"
+    # 0x27 = SecurityAccess service
+    # 0x02 = security level 1 (sendKey)
+    # XX XX XX XX = 4-byte computed key from VIDA
+
+  steps:
+    1: "Start Wireshark capture on USB-Ethernet NIC before launching VIDA"
+    2: "Connect VOE adapter to car, ignition to RUN"
+    3: "Launch VIDA, connect to vehicle"
+    4: "Initiate a software update or configuration write (triggers security access)"
+    5: "Stop capture after security access completes"
+    6: "Filter by tcp.port == 13400 in Wireshark"
+    7: "Look for 0x67 01 (seed response) followed by 0x27 02 (key send)"
+    8: "Record the seed (bytes after 67 01) and key (bytes after 27 02)"
+    9: "Submit seed/key pairs to known_keypairs list above"
+
+  notes: >
+    Volvo patched VIDA log [Crypt] lines — they no longer contain readable
+    seed/key data. Live Wireshark capture is now the primary method.
+    Collect 50+ pairs across multiple VIDA sessions for statistical analysis.
+    Each session uses different seeds (random), giving variance for RE.
+    This is your own vehicle and your own VIDA session — capturing this data
+    for personal research is consistent with right-to-repair principles.
+    Check your local regulations before proceeding.
+
+  analysis_approaches:
+    - "XOR: key == seed XOR constant?"
+    - "Rotation: key == rotate_bits(seed, n)?"
+    - "CRC: key == CRC32(seed)?"
+    - "LFSR: linear feedback shift register?"
+    - "RSA: key == pow(seed, exponent, modulus)? [suspected for level 1]"
+    - "Custom: statistical correlation across 50+ pairs"

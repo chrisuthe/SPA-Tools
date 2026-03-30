@@ -1,0 +1,334 @@
+# module_map/did_registry.yaml
+#
+# Data Identifier (DID) registry for Volvo SPA platform.
+#
+# Two sections:
+#   live_data_dids  - Real-time sensor/parameter DIDs (read via 0x22, no security)
+#   config_params   - Module configuration parameters (read via 0x22, write via 0x2E)
+#
+# STATUS:
+#   confirmed  - DID verified on live SPA vehicle with value validated
+#   candidate  - Address likely correct based on community reports
+#   unknown    - Placeholder, needs discovery scan to confirm
+#
+# VALUE TYPES:
+#   uint8    - Unsigned 8-bit integer (1 byte)
+#   uint16   - Unsigned 16-bit integer (2 bytes, big-endian)
+#   uint32   - Unsigned 32-bit integer (4 bytes, big-endian)
+#   bool     - Boolean (1 byte: 0x00=false, 0x01=true)
+#   ascii    - ASCII string
+#   raw      - Raw bytes, no decoding applied
+#
+# CONTRIBUTING:
+#   Run: python -m cli.main scan-dids --start 0xDD00 --end 0xDDFF
+#   Submit confirmed DIDs with: module, did, raw_response, vehicle_info
+#   See docs/contributing_dids.md for full instructions.
+
+# ── Standard ISO DIDs ──────────────────────────────────────────────────────────
+# These follow ISO 14229 and should work on any compliant ECU.
+
+standard_dids:
+
+  vin:
+    did: 0xF190
+    name: "Vehicle Identification Number"
+    module: CEM
+    type: ascii
+    length: 17
+    status: confirmed
+    notes: "ISO 14229 standard. Returns 17-char ASCII VIN string."
+
+  ecu_serial:
+    did: 0xF18C
+    name: "ECU serial number"
+    module: CEM
+    type: raw
+    length: 4
+    status: candidate
+
+  software_version:
+    did: 0xF101
+    name: "ECU software version"
+    module: ECM
+    type: raw
+    length: 4
+    status: candidate
+    notes: "Useful for identifying which calibration is currently loaded."
+
+  hardware_version:
+    did: 0xF191
+    name: "ECU hardware version"
+    module: CEM
+    type: raw
+    length: 4
+    status: candidate
+
+# ── Live Data DIDs ─────────────────────────────────────────────────────────────
+# Read via UDS 0x22. No security access required.
+
+live_data_dids:
+
+  coolant_temp:
+    did: 0xDD01
+    name: "Engine coolant temperature"
+    module: ECM
+    type: uint8
+    length: 1
+    unit: "C"
+    scale: 1.0
+    offset: -40.0
+    range: [-40, 215]
+    status: candidate
+    notes: >
+      Offset of -40 is standard Volvo/Bosch convention for temp sensors.
+      Raw 0x69 (105) = 65C (105 - 40 = 65).
+      The dash gauge is symbolic (cold/warm/hot) — this gives actual degrees.
+      Priority: HIGH — most requested feature from community.
+      TODO: Confirm DID address via scan on live ECM.
+
+  intake_air_temp:
+    did: 0xDD02
+    name: "Intake air temperature"
+    module: ECM
+    type: uint8
+    length: 1
+    unit: "C"
+    scale: 1.0
+    offset: -40.0
+    range: [-40, 120]
+    status: candidate
+    notes: "Adjacent to coolant DID — likely IAT. Verify on live car."
+
+  boost_pressure:
+    did: 0xDD03
+    name: "Turbo boost pressure (absolute)"
+    module: ECM
+    type: uint16
+    length: 2
+    unit: "kPa"
+    scale: 0.1
+    offset: 0.0
+    range: [0, 400]
+    status: candidate
+    notes: >
+      XC90 T6 runs ~220-240 kPa absolute boost at WOT (~18-20 psi gauge).
+      Subtract 101.3 kPa atmospheric to get gauge pressure.
+      Scale 0.1 and uint16 gives 0-6553 kPa range — should cover it.
+      Verify against a known MAP sensor reading or boost gauge.
+
+  engine_rpm:
+    did: 0xDD04
+    name: "Engine RPM"
+    module: ECM
+    type: uint16
+    length: 2
+    unit: "rpm"
+    scale: 0.25
+    offset: 0.0
+    range: [0, 8000]
+    status: candidate
+    notes: "Scale 0.25 matches SAE J1979 (OBD2 mode 01 PID 0C) convention."
+
+  throttle_position:
+    did: 0xDD05
+    name: "Throttle position"
+    module: ECM
+    type: uint8
+    length: 1
+    unit: "%"
+    scale: 0.3922
+    offset: 0.0
+    range: [0, 100]
+    status: candidate
+    notes: "scale = 100/255 = 0.3922. Matches OBD2 convention."
+
+  oil_temp:
+    did: 0xDD10
+    name: "Engine oil temperature"
+    module: ECM
+    type: uint8
+    length: 1
+    unit: "C"
+    scale: 1.0
+    offset: -40.0
+    range: [-40, 180]
+    status: candidate
+    notes: >
+      Not shown on Volvo dash. Very useful for tracking warm-up and
+      monitoring heat soak during aggressive driving or towing.
+      Priority: HIGH.
+
+  lambda:
+    did: 0xDD11
+    name: "Lambda / AFR"
+    module: ECM
+    type: uint16
+    length: 2
+    unit: "lambda"
+    scale: 0.0001
+    offset: 0.0
+    range: [0.7, 1.5]
+    status: unknown
+    notes: "Scale is a guess. May not be available on all trims."
+
+  ignition_advance:
+    did: 0xDD20
+    name: "Ignition timing advance"
+    module: ECM
+    type: uint8
+    length: 1
+    unit: "deg BTDC"
+    scale: 1.0
+    offset: -64.0
+    range: [-64, 63]
+    status: unknown
+    notes: "Offset -64 matches OBD2 PID 0E convention."
+
+  current_gear:
+    did: 0xDE01
+    name: "Current engaged gear"
+    module: TCM
+    type: uint8
+    length: 1
+    unit: "gear"
+    scale: 1.0
+    offset: 0.0
+    range: [0, 9]
+    status: candidate
+    notes: >
+      Expected encoding: 0=N, 1-8=forward gears, 9=R.
+      XC90 T6 uses Aisin Warner 8HP75 8-speed automatic.
+      Verify by putting car in manual mode and checking each gear position.
+      Priority: HIGH.
+
+  atf_temp:
+    did: 0xDE10
+    name: "Transmission fluid temperature"
+    module: TCM
+    type: uint8
+    length: 1
+    unit: "C"
+    scale: 1.0
+    offset: -40.0
+    range: [-40, 180]
+    status: candidate
+    notes: "Not shown on dash. Useful for towing and spirited driving."
+
+  battery_voltage:
+    did: 0xDA01
+    name: "12V battery voltage"
+    module: CEM
+    type: uint16
+    length: 2
+    unit: "V"
+    scale: 0.01
+    offset: 0.0
+    range: [0, 20]
+    status: candidate
+    notes: "Normal range: 13.8-14.4V with engine running (healthy alternator)."
+
+  vehicle_speed:
+    did: 0xDA02
+    name: "Vehicle speed"
+    module: CEM
+    type: uint16
+    length: 2
+    unit: "km/h"
+    scale: 0.01
+    offset: 0.0
+    range: [0, 300]
+    status: candidate
+
+# ── Configuration Parameters ───────────────────────────────────────────────────
+# Read via UDS 0x22, write via UDS 0x2E.
+# Writing requires extended/programming session + security access (CEM PIN).
+#
+# NOTE: DID addresses here are speculative — these are the parameters VDASH
+# and VIDA expose, but actual DID mappings need discovery via scan +
+# cross-referencing with VIDA Wireshark captures.
+# TODO: Capture config DID writes from a live VIDA session to confirm addresses.
+
+config_params:
+
+  stop_start_enabled:
+    did: 0xF401
+    name: "Auto engine stop/start"
+    module: CEM
+    type: bool
+    length: 1
+    writable: true
+    allowed_values: [0, 1]
+    status: unknown
+    notes: >
+      Permanently disables stop/start (vs pressing button each drive).
+      Very commonly requested config change. VDASH offers this — actual
+      DID address TBD. Capture from VIDA session via Wireshark to confirm.
+
+  video_in_motion:
+    did: 0xF402
+    name: "Video playback while driving"
+    module: IHU
+    type: bool
+    length: 1
+    writable: true
+    allowed_values: [0, 1]
+    status: unknown
+    notes: >
+      Enables video on center display while moving.
+      May be an IHU config rather than CEM. Legal note: passengers only.
+
+  independent_heating:
+    did: 0xF403
+    name: "Independent pre-heating (Webasto)"
+    module: CEM
+    type: bool
+    length: 1
+    writable: true
+    allowed_values: [0, 1]
+    status: unknown
+    notes: "Activates diesel/petrol cabin pre-heater. Only on equipped vehicles."
+
+  drl_style:
+    did: 0xF410
+    name: "Daytime running light style"
+    module: CEM
+    type: uint8
+    length: 1
+    writable: true
+    allowed_values: [0, 1, 2]
+    status: unknown
+    notes: "0=off, 1=standard, 2=enhanced. Market-dependent availability."
+
+  auto_lock_speed:
+    did: 0xF420
+    name: "Auto door lock speed threshold"
+    module: CEM
+    type: uint8
+    length: 1
+    unit: "km/h"
+    writable: true
+    range: [0, 30]
+    status: unknown
+    notes: "Speed at which doors auto-lock. 0 = disabled."
+
+  cornering_lights:
+    did: 0xF430
+    name: "Cornering lights enabled"
+    module: CEM
+    type: bool
+    length: 1
+    writable: true
+    allowed_values: [0, 1]
+    status: unknown
+    notes: "Static cornering lights if hardware is present."
+
+  steering_feel:
+    did: 0xF440
+    name: "Power steering feel"
+    module: PSCM
+    type: uint8
+    length: 1
+    writable: true
+    range: [0, 5]
+    status: unknown
+    notes: "Steering weight per drive mode. PSCM may use a different DID range."

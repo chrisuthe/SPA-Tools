@@ -1,0 +1,13 @@
+# Core protocol libraries
+python-doipclient>=1.1.0     # DoIP transport (ISO-13400)
+udsoncan>=1.25.0             # UDS protocol (ISO-14229)
+
+# Data / config
+pyyaml>=6.0                  # module_map YAML files
+
+# CLI output
+rich>=13.0                   # Pretty terminal tables, live panels
+
+# Dev / testing
+pytest>=7.0
+pytest-asyncio>=0.21
